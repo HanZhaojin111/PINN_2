@@ -16,8 +16,8 @@ pip install -r requirements.txt
 ```bash
 python pinn_turbulence.py \
   --data /home/runner/work/PINN_2/PINN_2/test_reconstructed(1).npy \
-  --train-steps 400 \
-  --test-steps 200 \
+  --train-time-steps 400 \
+  --test-time-steps 200 \
   --plots
 ```
 
@@ -29,8 +29,8 @@ python pinn_turbulence.py \
   --basis /path/to/basis.npy \
   --mean /path/to/mean.npy \
   --vars 3 \
-  --train-steps 400 \
-  --test-steps 200 \
+  --train-time-steps 400 \
+  --test-time-steps 200 \
   --pde-weight 1.0 \
   --plots
 ```

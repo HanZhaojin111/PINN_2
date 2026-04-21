@@ -216,13 +216,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mean", help="Optional mean .npy file for reconstruction.")
     parser.add_argument("--vars", type=int, help="Number of variables per spatial point (e.g., 3 for u,v,p).")
     parser.add_argument(
-        "--train-steps",
+        "--train-time-steps",
+        dest="train_steps",
         type=int,
         default=400,
         help="Number of consecutive time steps for training.",
     )
     parser.add_argument(
-        "--test-steps",
+        "--test-time-steps",
+        dest="test_steps",
         type=int,
         default=200,
         help="Number of consecutive time steps for prediction.",
@@ -352,10 +354,12 @@ def main() -> None:
         raise ValueError("Coordinate dimension must be 2 or 3 for PINN mode.")
 
     coords_tensor = torch.tensor(coords, dtype=torch.float32, device=device)
-    coords_norm = Normalizer(coords_tensor.min(dim=0).values, coords_tensor.max(dim=0).values).normalize(coords_tensor)
+    coords_normalizer = Normalizer(coords_tensor.min(dim=0).values, coords_tensor.max(dim=0).values)
+    coords_norm = coords_normalizer.normalize(coords_tensor)
 
     time_tensor = torch.tensor(time_series, dtype=torch.float32, device=device)
-    time_norm = Normalizer(time_tensor.min(), time_tensor.max()).normalize(time_tensor).unsqueeze(1)
+    time_normalizer = Normalizer(time_tensor.min(), time_tensor.max())
+    time_norm = time_normalizer.normalize(time_tensor).unsqueeze(1)
 
     field_tensor = torch.tensor(field, dtype=torch.float32, device=device)
     mean_field = field_tensor[:train_steps].mean(dim=(0, 1), keepdim=True)
