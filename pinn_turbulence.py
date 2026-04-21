@@ -257,15 +257,15 @@ def main() -> None:
     data = load_npy(args.data, "data")
     describe_array("data", data)
 
-    time_values = None
-    if args.time:
-        time_values = load_npy(args.time, "time")
+    time_values = load_npy(args.time, "time") if args.time else None
+    if time_values is not None:
         describe_array("time", time_values)
 
     basis = load_npy(args.basis, "basis") if args.basis else None
-    mean = load_npy(args.mean, "mean") if args.mean else None
     if basis is not None:
         describe_array("basis", basis)
+
+    mean = load_npy(args.mean, "mean") if args.mean else None
     if mean is not None:
         describe_array("mean", mean)
 
