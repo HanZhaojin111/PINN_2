@@ -215,8 +215,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--basis", help="Optional basis .npy file for reconstruction.")
     parser.add_argument("--mean", help="Optional mean .npy file for reconstruction.")
     parser.add_argument("--vars", type=int, help="Number of variables per spatial point (e.g., 3 for u,v,p).")
-    parser.add_argument("--train-steps", type=int, default=400, help="Number of time steps for training.")
-    parser.add_argument("--test-steps", type=int, default=200, help="Number of time steps for prediction.")
+    parser.add_argument(
+        "--train-steps",
+        "--train-timesteps",
+        dest="train_steps",
+        type=int,
+        default=400,
+        help="Number of consecutive time steps for training.",
+    )
+    parser.add_argument(
+        "--test-steps",
+        "--test-timesteps",
+        dest="test_steps",
+        type=int,
+        default=200,
+        help="Number of consecutive time steps for prediction.",
+    )
     parser.add_argument("--epochs", type=int, default=2000, help="Training epochs.")
     parser.add_argument("--data-batch", type=int, default=4096, help="Batch size for data loss.")
     parser.add_argument("--collocation-batch", type=int, default=4096, help="Batch size for PDE residual.")
