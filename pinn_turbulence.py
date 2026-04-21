@@ -125,7 +125,7 @@ def gradients(target: torch.Tensor, inputs: torch.Tensor) -> torch.Tensor:
 
 def navier_stokes_residual(
     model: nn.Module, inputs: torch.Tensor, viscosity: float, coord_dim: int, vars_count: int
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, ...]:
     inputs.requires_grad_(True)
     prediction = model(inputs)
 
@@ -147,7 +147,7 @@ def navier_stokes_residual(
         res_u = u_t + u * u_x + v * u_y + p_x - viscosity * (u_xx + u_yy)
         res_v = v_t + u * v_x + v * v_y + p_y - viscosity * (v_xx + v_yy)
         res_c = u_x + v_y
-        return res_u, res_v, res_c
+        return (res_u, res_v, res_c)
 
     if coord_dim == 3 and vars_count == 4:
         u, v, w, p = prediction[:, 0], prediction[:, 1], prediction[:, 2], prediction[:, 3]
@@ -175,7 +175,7 @@ def navier_stokes_residual(
         res_v = v_t + u * v_x + v * v_y + w * v_z + p_y - viscosity * (v_xx + v_yy + v_zz)
         res_w = w_t + u * w_x + v * w_y + w * w_z + p_z - viscosity * (w_xx + w_yy + w_zz)
         res_c = u_x + v_y + w_z
-        return res_u, res_v, res_c + res_w * 0.0
+        return (res_u, res_v, res_w, res_c)
 
     raise ValueError("Coordinate dimension and variable count are incompatible with Navier-Stokes residuals.")
 
@@ -396,10 +396,8 @@ def main() -> None:
         pde_loss = torch.tensor(0.0, device=device)
         if use_pde:
             collocation = sample_collocation(coords_norm, time_norm[:train_steps], args.collocation_batch)
-            res_u, res_v, res_c = navier_stokes_residual(
-                model, collocation, args.viscosity, coord_dim, vars_count
-            )
-            pde_loss = torch.mean(res_u ** 2) + torch.mean(res_v ** 2) + torch.mean(res_c ** 2)
+            residuals = navier_stokes_residual(model, collocation, args.viscosity, coord_dim, vars_count)
+            pde_loss = sum(torch.mean(res ** 2) for res in residuals)
 
         loss = (
             args.data_weight * data_loss
