@@ -7,7 +7,7 @@ pip install -r requirements.txt
 ```
 
 ## Data expectations
-- `test_reconstructed(1).npy` should be a 2D array with shape `[time, features]`.
+- `data.npy` (for example, `test_reconstructed(1).npy`) should be a 2D array with shape `[time, features]`.
 - If you have spatial coordinates, provide `--coords` (shape `[points, dim]`).
 - If your data is reduced (coefficients), provide `--basis` (shape `[features, points * vars]`)
   and optional `--mean` (shape `[points * vars]`) to reconstruct physical fields.
@@ -15,7 +15,7 @@ pip install -r requirements.txt
 ## Run (time-only coefficient prediction)
 ```bash
 python pinn_turbulence.py \
-  --data /home/runner/work/PINN_2/PINN_2/test_reconstructed(1).npy \
+  --data /path/to/data.npy \
   --train-time-steps 400 \
   --test-time-steps 200 \
   --plots
