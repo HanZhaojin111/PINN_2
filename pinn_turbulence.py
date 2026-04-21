@@ -217,14 +217,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--vars", type=int, help="Number of variables per spatial point (e.g., 3 for u,v,p).")
     parser.add_argument(
         "--train-time-steps",
-        dest="train_steps",
         type=int,
         default=400,
         help="Number of consecutive time steps for training.",
     )
     parser.add_argument(
         "--test-time-steps",
-        dest="test_steps",
         type=int,
         default=200,
         help="Number of consecutive time steps for prediction.",
@@ -278,8 +276,8 @@ def main() -> None:
 
     time_series = prepare_time_series(data, time_values)
 
-    train_steps = args.train_steps
-    test_steps = args.test_steps
+    train_steps = args.train_time_steps
+    test_steps = args.test_time_steps
     if train_steps + test_steps > data.shape[0]:
         raise ValueError("Train + test steps exceed available time steps.")
 

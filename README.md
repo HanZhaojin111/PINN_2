@@ -1,4 +1,4 @@
-# PINN_2
+# PINN_2 (Turbulence PINN Prediction)
 Use PINN models to predict turbulence data from reduced coefficients or reconstructed fields.
 
 ## Setup
