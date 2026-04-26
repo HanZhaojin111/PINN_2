@@ -190,9 +190,14 @@ def select_torch_device() -> "torch.device":
     if torch is None:
         raise SystemExit("PyTorch is required for autoencoder decoding. Install with `pip install torch`.")
     mps_backend = getattr(torch.backends, "mps", None)
+    if mps_backend is None:
+        mps_available = False
+    else:
+        is_available = getattr(mps_backend, "is_available", None)
+        mps_available = callable(is_available) and is_available()
     if torch.cuda.is_available():
         return torch.device("cuda")
-    if mps_backend is not None and callable(getattr(mps_backend, "is_available", None)) and mps_backend.is_available():
+    if mps_available:
         return torch.device("mps")
     return torch.device("cpu")
 
@@ -278,10 +283,7 @@ def main() -> None:
         elif predictions.ndim == 2:
             if args.vars is None:
                 vars_count = 1
-                print(
-                    "Predictions array is 2D (shape [time, features]) without autoencoder: "
-                    "--vars not provided; defaulting to 1 variable per point."
-                )
+                print("Defaulting to 1 variable per point for 2D predictions without --vars.")
             else:
                 vars_count = args.vars
             if predictions.shape[1] % vars_count != 0:
