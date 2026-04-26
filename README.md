@@ -58,3 +58,14 @@ Notes:
 - `coords.npy` should be shape `[points, dim]` (dim=2 or 3). For 2D it is padded to 3D in VTU.
 - `--vars` is the number of variables per point.
 - Use `--var-names` to label variables in the VTU file (comma-separated); otherwise generic names are used.
+
+If your `predictions.npy` already stores full fields (shape `[time, points, vars]` or
+`[time, points * vars]`), you can skip the autoencoder and only provide the predictions file.
+When `--coords` is omitted, index-based coordinates are generated automatically.
+
+```bash
+python autoencoder_to_vtu.py \
+  --predictions outputs/predictions.npy \
+  --vars 3 \
+  --output-dir vtu
+```

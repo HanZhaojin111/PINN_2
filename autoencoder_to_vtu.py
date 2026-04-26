@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 import argparse
 import os
 import re
@@ -9,23 +11,32 @@ import numpy as np
 try:
     import torch
     import torch.nn as nn
-except ImportError as exc:  # pragma: no cover - torch is required for execution
-    raise SystemExit("PyTorch is required. Install with `pip install torch`.") from exc
+except ImportError:  # pragma: no cover - torch is optional for raw predictions
+    torch = None  # type: ignore[assignment]
+    nn = None  # type: ignore[assignment]
 
 
-class MLP(nn.Module):
-    def __init__(self, in_dim: int, out_dim: int, hidden_layers: int, hidden_width: int) -> None:
-        super().__init__()
-        layers: List[nn.Module] = []
-        layer_sizes = [in_dim] + [hidden_width] * hidden_layers + [out_dim]
-        for idx in range(len(layer_sizes) - 2):
-            layers.append(nn.Linear(layer_sizes[idx], layer_sizes[idx + 1]))
-            layers.append(nn.Tanh())
-        layers.append(nn.Linear(layer_sizes[-2], layer_sizes[-1]))
-        self.net = nn.Sequential(*layers)
+if nn is not None:
 
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        return self.net(inputs)
+    class MLP(nn.Module):
+        def __init__(self, in_dim: int, out_dim: int, hidden_layers: int, hidden_width: int) -> None:
+            super().__init__()
+            layers: List[nn.Module] = []
+            layer_sizes = [in_dim] + [hidden_width] * hidden_layers + [out_dim]
+            for idx in range(len(layer_sizes) - 2):
+                layers.append(nn.Linear(layer_sizes[idx], layer_sizes[idx + 1]))
+                layers.append(nn.Tanh())
+            layers.append(nn.Linear(layer_sizes[-2], layer_sizes[-1]))
+            self.net = nn.Sequential(*layers)
+
+        def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+            return self.net(inputs)
+
+else:
+
+    class MLP:  # type: ignore[misc]
+        def __init__(self, *_: object, **__: object) -> None:
+            raise SystemExit("PyTorch is required for autoencoder decoding. Install with `pip install torch`.")
 
 
 def load_npy(path: str, name: str) -> np.ndarray:
@@ -160,10 +171,13 @@ def write_vtu(path: str, points: np.ndarray, point_data: Dict[str, np.ndarray]) 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Decode PINN predictions with an autoencoder and export VTU files.")
-    parser.add_argument("--predictions", required=True, help="Path to predictions.npy (latent coefficients).")
-    parser.add_argument("--autoencoder", required=True, help="Path to autoencoder checkpoint (.pt/.pth).")
-    parser.add_argument("--coords", required=True, help="Path to coordinates .npy with shape [points, dim].")
-    parser.add_argument("--vars", type=int, required=True, help="Number of variables per spatial point.")
+    parser.add_argument("--predictions", required=True, help="Path to predictions.npy.")
+    parser.add_argument("--autoencoder", help="Path to autoencoder checkpoint (.pt/.pth) for latent predictions.")
+    parser.add_argument(
+        "--coords",
+        help="Path to coordinates .npy with shape [points, dim]. If omitted, index-based coordinates are used.",
+    )
+    parser.add_argument("--vars", type=int, help="Number of variables per spatial point.")
     parser.add_argument("--var-names", help="Comma-separated variable names for VTU output.")
     parser.add_argument("--latent-dim", type=int, help="Latent dimension (overrides checkpoint config).")
     parser.add_argument("--hidden-layers", type=int, help="Hidden layers in decoder (overrides checkpoint config).")
@@ -179,37 +193,89 @@ def main() -> None:
     args = parse_args()
 
     predictions = load_npy(args.predictions, "predictions")
-    if predictions.ndim != 2:
-        raise ValueError("predictions.npy must be 2D [time, latent_dim].")
     describe_array("predictions", predictions)
 
-    coords = load_npy(args.coords, "coords")
-    if coords.ndim == 1:
-        coords = coords[:, None]
-    if coords.ndim != 2:
-        raise ValueError("coords.npy must be 2D [points, dim].")
-    describe_array("coords", coords)
+    if args.autoencoder:
+        if torch is None:
+            raise SystemExit("PyTorch is required for autoencoder decoding. Install with `pip install torch`.")
+        if predictions.ndim != 2:
+            raise ValueError("predictions.npy must be 2D [time, latent_dim] when using --autoencoder.")
+        if args.vars is None:
+            raise ValueError("--vars is required when decoding with an autoencoder.")
+        vars_count = args.vars
 
-    state_dict, config = load_checkpoint(args.autoencoder)
-    decoder_state = extract_decoder_state(state_dict)
-    inferred_latent, inferred_layers, inferred_width, inferred_output = infer_decoder_arch(decoder_state)
+        state_dict, config = load_checkpoint(args.autoencoder)
+        decoder_state = extract_decoder_state(state_dict)
+        inferred_latent, inferred_layers, inferred_width, inferred_output = infer_decoder_arch(decoder_state)
 
-    latent_dim = resolve_config_int(args.latent_dim, config, ["latent_dim", "z_dim"]) or inferred_latent
-    hidden_layers = resolve_config_int(args.hidden_layers, config, ["hidden_layers"]) or inferred_layers
-    hidden_width = resolve_config_int(args.hidden_width, config, ["hidden_width"]) or inferred_width
-    output_dim = resolve_config_int(args.output_dim, config, ["output_dim", "out_dim"]) or inferred_output
+        latent_dim = resolve_config_int(args.latent_dim, config, ["latent_dim", "z_dim"]) or inferred_latent
+        hidden_layers = resolve_config_int(args.hidden_layers, config, ["hidden_layers"]) or inferred_layers
+        hidden_width = resolve_config_int(args.hidden_width, config, ["hidden_width"]) or inferred_width
+        output_dim = resolve_config_int(args.output_dim, config, ["output_dim", "out_dim"]) or inferred_output
 
-    if predictions.shape[1] != latent_dim:
-        raise ValueError("Predictions feature dimension does not match decoder latent dimension.")
+        if predictions.shape[1] != latent_dim:
+            raise ValueError("Predictions feature dimension does not match decoder latent dimension.")
 
-    vars_count = args.vars
-    if output_dim is None:
-        output_dim = coords.shape[0] * vars_count
-    if output_dim % vars_count != 0:
-        raise ValueError("Output dimension must be divisible by variable count.")
-    points = output_dim // vars_count
-    if coords.shape[0] != points:
-        raise ValueError("coords point count does not match decoded output dimension.")
+        if output_dim is None:
+            raise ValueError("Decoder output dimension could not be inferred; provide --output-dim.")
+        if output_dim % vars_count != 0:
+            raise ValueError("Output dimension must be divisible by variable count.")
+        points = output_dim // vars_count
+
+        decoder = MLP(latent_dim, output_dim, hidden_layers, hidden_width)
+        decoder.load_state_dict(decoder_state)
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+        elif torch.backends.mps.is_available():
+            device = torch.device("mps")
+        else:
+            device = torch.device("cpu")
+        print(f"Decoding on device: {device}")
+        decoder.to(device)
+        decoder.eval()
+
+        pred_tensor = torch.from_numpy(predictions.astype(np.float32))
+        decoded = []
+        with torch.no_grad():
+            for start in range(0, pred_tensor.shape[0], args.batch_size):
+                batch = pred_tensor[start : start + args.batch_size].to(device)
+                decoded.append(decoder(batch).cpu().numpy())
+        decoded_np = np.concatenate(decoded, axis=0)
+        field = decoded_np.reshape(decoded_np.shape[0], points, vars_count)
+    else:
+        if predictions.ndim == 3:
+            field = predictions
+            vars_count = field.shape[2]
+            if args.vars is not None and args.vars != vars_count:
+                raise ValueError("--vars does not match the last dimension of predictions.npy.")
+        elif predictions.ndim == 2:
+            vars_count = args.vars or 1
+            if predictions.shape[1] % vars_count != 0:
+                raise ValueError("predictions.npy feature dimension must be divisible by --vars.")
+            points = predictions.shape[1] // vars_count
+            field = predictions.reshape(predictions.shape[0], points, vars_count)
+        else:
+            raise ValueError("predictions.npy must be 2D [time, features] or 3D [time, points, vars].")
+
+    points = field.shape[1]
+    if args.coords:
+        coords = load_npy(args.coords, "coords")
+        if coords.ndim == 1:
+            coords = coords[:, None]
+        if coords.ndim != 2:
+            raise ValueError("coords.npy must be 2D [points, dim].")
+        if coords.shape[0] != points:
+            raise ValueError("coords point count does not match decoded output dimension.")
+        describe_array("coords", coords)
+    else:
+        coords = np.column_stack(
+            [
+                np.arange(points, dtype=np.float32),
+                np.zeros(points, dtype=np.float32),
+                np.zeros(points, dtype=np.float32),
+            ]
+        )
+        print("coords not provided; using index-based coordinates.")
 
     coord_dim = coords.shape[1]
     if coord_dim == 2:
@@ -225,27 +291,6 @@ def main() -> None:
         var_names = names
     else:
         var_names = [f"var{idx}" for idx in range(vars_count)]
-
-    decoder = MLP(latent_dim, output_dim, hidden_layers, hidden_width)
-    decoder.load_state_dict(decoder_state)
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-    elif torch.backends.mps.is_available():
-        device = torch.device("mps")
-    else:
-        device = torch.device("cpu")
-    print(f"Decoding on device: {device}")
-    decoder.to(device)
-    decoder.eval()
-
-    pred_tensor = torch.from_numpy(predictions.astype(np.float32))
-    decoded = []
-    with torch.no_grad():
-        for start in range(0, pred_tensor.shape[0], args.batch_size):
-            batch = pred_tensor[start : start + args.batch_size].to(device)
-            decoded.append(decoder(batch).cpu().numpy())
-    decoded_np = np.concatenate(decoded, axis=0)
-    field = decoded_np.reshape(decoded_np.shape[0], points, vars_count)
 
     os.makedirs(args.output_dir, exist_ok=True)
     for step in range(field.shape[0]):
