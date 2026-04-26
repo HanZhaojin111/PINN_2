@@ -140,13 +140,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--predictions", required=True, help="Path to predictions.npy (latent coefficients).")
     parser.add_argument("--autoencoder", required=True, help="Path to autoencoder checkpoint (.pt/.pth).")
     parser.add_argument("--coords", required=True, help="Path to coordinates .npy with shape [points, dim].")
-    parser.add_argument("--vars", type=int, help="Number of variables per spatial point.")
+    parser.add_argument("--vars", type=int, required=True, help="Number of variables per spatial point.")
     parser.add_argument("--var-names", help="Comma-separated variable names for VTU output.")
     parser.add_argument("--latent-dim", type=int, help="Latent dimension (overrides checkpoint config).")
     parser.add_argument("--hidden-layers", type=int, help="Hidden layers in decoder (overrides checkpoint config).")
     parser.add_argument("--hidden-width", type=int, help="Hidden width in decoder (overrides checkpoint config).")
     parser.add_argument("--output-dim", type=int, help="Decoder output dimension (overrides checkpoint config).")
     parser.add_argument("--batch-size", type=int, default=4096, help="Batch size for decoding.")
+    parser.add_argument("--log-every", type=int, default=50, help="Log every N VTU files (0 to disable).")
     parser.add_argument("--output-dir", default="vtu", help="Directory to write VTU files.")
     return parser.parse_args()
 
@@ -178,28 +179,16 @@ def main() -> None:
     if predictions.shape[1] != latent_dim:
         raise ValueError("Predictions feature dimension does not match decoder latent dimension.")
 
-    if args.vars is None:
-        divisible_by_3 = output_dim % 3 == 0
-        divisible_by_4 = output_dim % 4 == 0
-        if divisible_by_3 and divisible_by_4:
-            raise ValueError("Output dimension is divisible by 3 and 4. Provide --vars to disambiguate.")
-        if divisible_by_3:
-            vars_count = 3
-        elif divisible_by_4:
-            vars_count = 4
-        else:
-            raise ValueError("Unable to infer variable count. Provide --vars.")
-    else:
-        vars_count = args.vars
-
-    points = output_dim // vars_count
+    vars_count = args.vars
+    if output_dim is None:
+        output_dim = coords.shape[0] * vars_count
     if output_dim % vars_count != 0:
         raise ValueError("Output dimension must be divisible by variable count.")
+    points = output_dim // vars_count
     if coords.shape[0] != points:
         raise ValueError("coords point count does not match decoded output dimension.")
 
     coord_dim = coords.shape[1]
-    original_coord_dim = coord_dim
     if coord_dim == 2:
         coords = np.column_stack([coords, np.zeros(points, dtype=coords.dtype)])
         coord_dim = 3
@@ -211,10 +200,6 @@ def main() -> None:
         if len(names) != vars_count:
             raise ValueError("Number of --var-names entries must match --vars.")
         var_names = names
-    elif vars_count == 3 and original_coord_dim == 2:
-        var_names = ["u", "v", "p"]
-    elif vars_count == 4 and original_coord_dim == 3:
-        var_names = ["u", "v", "w", "p"]
     else:
         var_names = [f"var{idx}" for idx in range(vars_count)]
 
@@ -237,7 +222,7 @@ def main() -> None:
         point_data = {name: field[step, :, idx] for idx, name in enumerate(var_names)}
         path = os.path.join(args.output_dir, f"frame_{step:04d}.vtu")
         write_vtu(path, coords, point_data)
-        if step % 50 == 0:
+        if args.log_every > 0 and step % args.log_every == 0:
             print(f"Wrote {path}")
 
 

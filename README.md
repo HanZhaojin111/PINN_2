@@ -56,5 +56,5 @@ python autoencoder_to_vtu.py \
 
 Notes:
 - `coords.npy` should be shape `[points, dim]` (dim=2 or 3). For 2D it is padded to 3D in VTU.
-- `--vars` is the number of variables per point (e.g., 3 for u,v,p).
-- Use `--var-names` to label variables in the VTU file (comma-separated).
+- `--vars` is the number of variables per point.
+- Use `--var-names` to label variables in the VTU file (comma-separated); otherwise generic names are used.
