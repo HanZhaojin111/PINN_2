@@ -226,7 +226,7 @@ def main() -> None:
         decoder.load_state_dict(decoder_state)
         if torch.cuda.is_available():
             device = torch.device("cuda")
-        elif torch.backends.mps.is_available():
+        elif getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
             device = torch.device("mps")
         else:
             device = torch.device("cpu")
