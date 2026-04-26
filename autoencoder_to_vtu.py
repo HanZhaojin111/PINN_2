@@ -93,9 +93,25 @@ def resolve_config_int(value: Optional[int], config: Dict[str, int], keys: Itera
 
 def format_ascii(array: np.ndarray) -> str:
     flat = array.ravel()
+    if flat.size == 0:
+        return ""
     if np.issubdtype(flat.dtype, np.floating):
-        return " ".join(f"{value:.6e}" for value in flat)
-    return " ".join(str(int(value)) for value in flat)
+        text = np.array2string(
+            flat,
+            separator=" ",
+            max_line_width=1_000_000,
+            threshold=flat.size,
+            formatter={"float_kind": lambda value: f"{value:.6e}"},
+        )
+    else:
+        text = np.array2string(
+            flat,
+            separator=" ",
+            max_line_width=1_000_000,
+            threshold=flat.size,
+            formatter={"int_kind": lambda value: str(int(value))},
+        )
+    return text.strip("[]")
 
 
 def write_vtu(path: str, points: np.ndarray, point_data: Dict[str, np.ndarray]) -> None:
@@ -103,36 +119,43 @@ def write_vtu(path: str, points: np.ndarray, point_data: Dict[str, np.ndarray]) 
     connectivity = np.arange(num_points, dtype=np.int32)
     offsets = np.arange(1, num_points + 1, dtype=np.int32)
     types = np.ones(num_points, dtype=np.uint8)
+    lines = [
+        '<?xml version="1.0"?>\n',
+        '<VTKFile type="UnstructuredGrid" version="0.1" byte_order="LittleEndian">\n',
+        "  <UnstructuredGrid>\n",
+        f'    <Piece NumberOfPoints="{num_points}" NumberOfCells="{num_points}">\n',
+        "      <Points>\n",
+        '        <DataArray type="Float32" NumberOfComponents="3" format="ascii">\n',
+        f"          {format_ascii(points.astype(np.float32))}\n",
+        "        </DataArray>\n",
+        "      </Points>\n",
+        "      <Cells>\n",
+        '        <DataArray type="Int32" Name="connectivity" format="ascii">\n',
+        f"          {format_ascii(connectivity)}\n",
+        "        </DataArray>\n",
+        '        <DataArray type="Int32" Name="offsets" format="ascii">\n',
+        f"          {format_ascii(offsets)}\n",
+        "        </DataArray>\n",
+        '        <DataArray type="UInt8" Name="types" format="ascii">\n',
+        f"          {format_ascii(types)}\n",
+        "        </DataArray>\n",
+        "      </Cells>\n",
+        "      <PointData>\n",
+    ]
+    for name, values in point_data.items():
+        lines.append(f'        <DataArray type="Float32" Name="{name}" format="ascii">\n')
+        lines.append(f"          {format_ascii(values.astype(np.float32))}\n")
+        lines.append("        </DataArray>\n")
+    lines.extend(
+        [
+            "      </PointData>\n",
+            "    </Piece>\n",
+            "  </UnstructuredGrid>\n",
+            "</VTKFile>\n",
+        ]
+    )
     with open(path, "w", encoding="utf-8") as handle:
-        handle.write('<?xml version="1.0"?>\n')
-        handle.write('<VTKFile type="UnstructuredGrid" version="0.1" byte_order="LittleEndian">\n')
-        handle.write("  <UnstructuredGrid>\n")
-        handle.write(f'    <Piece NumberOfPoints="{num_points}" NumberOfCells="{num_points}">\n')
-        handle.write("      <Points>\n")
-        handle.write('        <DataArray type="Float32" NumberOfComponents="3" format="ascii">\n')
-        handle.write(f"          {format_ascii(points.astype(np.float32))}\n")
-        handle.write("        </DataArray>\n")
-        handle.write("      </Points>\n")
-        handle.write("      <Cells>\n")
-        handle.write('        <DataArray type="Int32" Name="connectivity" format="ascii">\n')
-        handle.write(f"          {format_ascii(connectivity)}\n")
-        handle.write("        </DataArray>\n")
-        handle.write('        <DataArray type="Int32" Name="offsets" format="ascii">\n')
-        handle.write(f"          {format_ascii(offsets)}\n")
-        handle.write("        </DataArray>\n")
-        handle.write('        <DataArray type="UInt8" Name="types" format="ascii">\n')
-        handle.write(f"          {format_ascii(types)}\n")
-        handle.write("        </DataArray>\n")
-        handle.write("      </Cells>\n")
-        handle.write("      <PointData>\n")
-        for name, values in point_data.items():
-            handle.write(f'        <DataArray type="Float32" Name="{name}" format="ascii">\n')
-            handle.write(f"          {format_ascii(values.astype(np.float32))}\n")
-            handle.write("        </DataArray>\n")
-        handle.write("      </PointData>\n")
-        handle.write("    </Piece>\n")
-        handle.write("  </UnstructuredGrid>\n")
-        handle.write("</VTKFile>\n")
+        handle.write("".join(lines))
 
 
 def parse_args() -> argparse.Namespace:
