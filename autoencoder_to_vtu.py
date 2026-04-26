@@ -195,8 +195,10 @@ def main() -> None:
         raise ValueError("coords point count does not match decoded output dimension.")
 
     coord_dim = coords.shape[1]
+    original_coord_dim = coord_dim
     if coord_dim == 2:
         coords = np.column_stack([coords, np.zeros(points, dtype=coords.dtype)])
+        coord_dim = 3
     elif coord_dim != 3:
         raise ValueError("Coordinates must have 2 or 3 dimensions.")
 
@@ -205,9 +207,9 @@ def main() -> None:
         if len(names) != vars_count:
             raise ValueError("Number of --var-names entries must match --vars.")
         var_names = names
-    elif vars_count == 3 and coord_dim == 2:
+    elif vars_count == 3 and original_coord_dim == 2:
         var_names = ["u", "v", "p"]
-    elif vars_count == 4 and coord_dim == 3:
+    elif vars_count == 4 and original_coord_dim == 3:
         var_names = ["u", "v", "w", "p"]
     else:
         var_names = [f"var{idx}" for idx in range(vars_count)]
