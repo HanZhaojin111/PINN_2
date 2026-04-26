@@ -214,9 +214,7 @@ def main() -> None:
     decoded = []
     with torch.no_grad():
         for start in range(0, pred_tensor.shape[0], args.batch_size):
-            batch = pred_tensor[start : start + args.batch_size]
-            if device.type != "cpu":
-                batch = batch.to(device, non_blocking=True)
+            batch = pred_tensor[start : start + args.batch_size].to(device)
             decoded.append(decoder(batch).cpu().numpy())
     decoded_np = np.concatenate(decoded, axis=0)
     field = decoded_np.reshape(decoded_np.shape[0], points, vars_count)
