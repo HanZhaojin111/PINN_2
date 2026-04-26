@@ -40,3 +40,21 @@ python pinn_turbulence.py \
 - `outputs/metrics.json`: mean MSE and relative error.
 - `outputs/mse_over_time.npy` and `outputs/rel_error_over_time.npy`.
 - Optional plots if `--plots` is provided.
+
+## Autoencoder decode to VTU (Paraview)
+If your `predictions.npy` contains latent coefficients from a trained autoencoder, you can decode
+them to full fields and export VTU files for Paraview.
+
+```bash
+python autoencoder_to_vtu.py \
+  --predictions outputs/predictions.npy \
+  --autoencoder /path/to/autoencoder.pt \
+  --coords /path/to/coords.npy \
+  --vars 3 \
+  --output-dir vtu
+```
+
+Notes:
+- `coords.npy` should be shape `[points, dim]` (dim=2 or 3). For 2D it is padded to 3D in VTU.
+- `--vars` is the number of variables per point (e.g., 3 for u,v,p).
+- Use `--var-names` to label variables in the VTU file (comma-separated).
