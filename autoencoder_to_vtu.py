@@ -192,7 +192,7 @@ def select_torch_device() -> "torch.device":
     mps_backend = getattr(torch.backends, "mps", None)
     if torch.cuda.is_available():
         return torch.device("cuda")
-    if mps_backend is not None and hasattr(mps_backend, "is_available") and mps_backend.is_available():
+    if mps_backend is not None and callable(getattr(mps_backend, "is_available", None)) and mps_backend.is_available():
         return torch.device("mps")
     return torch.device("cpu")
 
@@ -278,7 +278,10 @@ def main() -> None:
         elif predictions.ndim == 2:
             if args.vars is None:
                 vars_count = 1
-                print("2D predictions without autoencoder: --vars not provided; defaulting to 1 variable per point.")
+                print(
+                    "Predictions array is 2D (shape [time, features]) without autoencoder: "
+                    "--vars not provided; defaulting to 1 variable per point."
+                )
             else:
                 vars_count = args.vars
             if predictions.shape[1] % vars_count != 0:
@@ -295,7 +298,7 @@ def main() -> None:
         describe_array("coords", coords)
     else:
         coords = normalize_coords(np.arange(points, dtype=np.float32), points)
-        print("coords not provided; using index-based coordinates (x=index, y=z=0).")
+        print("coords not provided; using index-based coordinates (x=index, y=0, z=0).")
 
     if args.var_names:
         names = [name.strip() for name in args.var_names.split(",") if name.strip()]
