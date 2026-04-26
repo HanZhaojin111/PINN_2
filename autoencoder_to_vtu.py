@@ -179,9 +179,13 @@ def main() -> None:
         raise ValueError("Predictions feature dimension does not match decoder latent dimension.")
 
     if args.vars is None:
-        if output_dim % 3 == 0:
+        divisible_by_3 = output_dim % 3 == 0
+        divisible_by_4 = output_dim % 4 == 0
+        if divisible_by_3 and divisible_by_4:
+            raise ValueError("Output dimension is divisible by 3 and 4. Provide --vars to disambiguate.")
+        if divisible_by_3:
             vars_count = 3
-        elif output_dim % 4 == 0:
+        elif divisible_by_4:
             vars_count = 4
         else:
             raise ValueError("Unable to infer variable count. Provide --vars.")
@@ -233,7 +237,7 @@ def main() -> None:
         point_data = {name: field[step, :, idx] for idx, name in enumerate(var_names)}
         path = os.path.join(args.output_dir, f"frame_{step:04d}.vtu")
         write_vtu(path, coords, point_data)
-        if step == 0 or (step + 1) % 50 == 0:
+        if step % 50 == 0:
             print(f"Wrote {path}")
 
 
