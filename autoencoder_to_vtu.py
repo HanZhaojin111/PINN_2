@@ -82,7 +82,7 @@ def infer_decoder_arch(state_dict: Dict[str, torch.Tensor]) -> Tuple[int, int, i
     return int(latent_dim), int(hidden_layers), int(hidden_width), int(output_dim)
 
 
-def resolve_int(value: Optional[int], config: Dict[str, int], keys: Iterable[str]) -> Optional[int]:
+def resolve_config_int(value: Optional[int], config: Dict[str, int], keys: Iterable[str]) -> Optional[int]:
     if value is not None:
         return value
     for key in keys:
@@ -171,10 +171,10 @@ def main() -> None:
     decoder_state = extract_decoder_state(state_dict)
     inferred_latent, inferred_layers, inferred_width, inferred_output = infer_decoder_arch(decoder_state)
 
-    latent_dim = resolve_int(args.latent_dim, config, ["latent_dim", "z_dim"]) or inferred_latent
-    hidden_layers = resolve_int(args.hidden_layers, config, ["hidden_layers"]) or inferred_layers
-    hidden_width = resolve_int(args.hidden_width, config, ["hidden_width"]) or inferred_width
-    output_dim = resolve_int(args.output_dim, config, ["output_dim", "out_dim"]) or inferred_output
+    latent_dim = resolve_config_int(args.latent_dim, config, ["latent_dim", "z_dim"]) or inferred_latent
+    hidden_layers = resolve_config_int(args.hidden_layers, config, ["hidden_layers"]) or inferred_layers
+    hidden_width = resolve_config_int(args.hidden_width, config, ["hidden_width"]) or inferred_width
+    output_dim = resolve_config_int(args.output_dim, config, ["output_dim", "out_dim"]) or inferred_output
 
     if predictions.shape[1] != latent_dim:
         raise ValueError("Predictions feature dimension does not match decoder latent dimension.")
@@ -206,13 +206,17 @@ def main() -> None:
     decoder = MLP(latent_dim, output_dim, hidden_layers, hidden_width)
     decoder.load_state_dict(decoder_state)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Decoding on device: {device}")
     decoder.to(device)
     decoder.eval()
 
+    pred_tensor = torch.from_numpy(predictions.astype(np.float32))
     decoded = []
     with torch.no_grad():
-        for start in range(0, predictions.shape[0], args.batch_size):
-            batch = torch.tensor(predictions[start : start + args.batch_size], dtype=torch.float32, device=device)
+        for start in range(0, pred_tensor.shape[0], args.batch_size):
+            batch = pred_tensor[start : start + args.batch_size]
+            if device.type != "cpu":
+                batch = batch.to(device, non_blocking=True)
             decoded.append(decoder(batch).cpu().numpy())
     decoded_np = np.concatenate(decoded, axis=0)
     field = decoded_np.reshape(decoded_np.shape[0], points, vars_count)
