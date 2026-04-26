@@ -169,6 +169,15 @@ def write_vtu(path: str, points: np.ndarray, point_data: Dict[str, np.ndarray]) 
         handle.write("".join(lines))
 
 
+def select_torch_device() -> "torch.device":
+    mps_backend = getattr(torch.backends, "mps", None)
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if mps_backend is not None and mps_backend.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Decode PINN predictions with an autoencoder and export VTU files.")
     parser.add_argument("--predictions", required=True, help="Path to predictions.npy.")
@@ -177,7 +186,11 @@ def parse_args() -> argparse.Namespace:
         "--coords",
         help="Path to coordinates .npy with shape [points, dim]. If omitted, index-based coordinates are used.",
     )
-    parser.add_argument("--vars", type=int, help="Number of variables per spatial point.")
+    parser.add_argument(
+        "--vars",
+        type=int,
+        help="Number of variables per spatial point (defaults to 1 for raw 2D predictions).",
+    )
     parser.add_argument("--var-names", help="Comma-separated variable names for VTU output.")
     parser.add_argument("--latent-dim", type=int, help="Latent dimension (overrides checkpoint config).")
     parser.add_argument("--hidden-layers", type=int, help="Hidden layers in decoder (overrides checkpoint config).")
@@ -224,13 +237,7 @@ def main() -> None:
 
         decoder = MLP(latent_dim, output_dim, hidden_layers, hidden_width)
         decoder.load_state_dict(decoder_state)
-        mps_backend = getattr(torch.backends, "mps", None)
-        if torch.cuda.is_available():
-            device = torch.device("cuda")
-        elif mps_backend is not None and mps_backend.is_available():
-            device = torch.device("mps")
-        else:
-            device = torch.device("cpu")
+        device = select_torch_device()
         print(f"Decoding on device: {device}")
         decoder.to(device)
         decoder.eval()
@@ -280,7 +287,7 @@ def main() -> None:
                 np.zeros(points, dtype=np.float32),
             ]
         )
-        print("coords not provided; using index-based coordinates.")
+        print("coords not provided; using index-based coordinates (x=index, y=z=0).")
 
     coord_dim = coords.shape[1]
     if coord_dim == 2:
