@@ -169,13 +169,30 @@ def write_vtu(path: str, points: np.ndarray, point_data: Dict[str, np.ndarray]) 
         handle.write("".join(lines))
 
 
+def normalize_coords(coords: np.ndarray, points: int) -> np.ndarray:
+    if coords.ndim == 1:
+        coords = coords[:, None]
+    if coords.ndim != 2:
+        raise ValueError("coords.npy must be 2D [points, dim].")
+    if coords.shape[0] != points:
+        raise ValueError("coords point count does not match decoded output dimension.")
+    coord_dim = coords.shape[1]
+    if coord_dim == 1:
+        coords = np.column_stack([coords, np.zeros(points, dtype=coords.dtype), np.zeros(points, dtype=coords.dtype)])
+    elif coord_dim == 2:
+        coords = np.column_stack([coords, np.zeros(points, dtype=coords.dtype)])
+    elif coord_dim != 3:
+        raise ValueError("Coordinates must have 1, 2, or 3 dimensions.")
+    return coords
+
+
 def select_torch_device() -> "torch.device":
     if torch is None:
         raise SystemExit("PyTorch is required for autoencoder decoding. Install with `pip install torch`.")
     mps_backend = getattr(torch.backends, "mps", None)
     if torch.cuda.is_available():
         return torch.device("cuda")
-    if mps_backend is not None and mps_backend.is_available():
+    if mps_backend is not None and hasattr(mps_backend, "is_available") and mps_backend.is_available():
         return torch.device("mps")
     return torch.device("cpu")
 
@@ -274,29 +291,11 @@ def main() -> None:
     points = field.shape[1]
     if args.coords:
         coords = load_npy(args.coords, "coords")
-        if coords.ndim == 1:
-            coords = coords[:, None]
-        if coords.ndim != 2:
-            raise ValueError("coords.npy must be 2D [points, dim].")
-        if coords.shape[0] != points:
-            raise ValueError("coords point count does not match decoded output dimension.")
+        coords = normalize_coords(coords, points)
         describe_array("coords", coords)
     else:
-        coords = np.column_stack(
-            [
-                np.arange(points, dtype=np.float32),
-                np.zeros(points, dtype=np.float32),
-                np.zeros(points, dtype=np.float32),
-            ]
-        )
+        coords = normalize_coords(np.arange(points, dtype=np.float32), points)
         print("coords not provided; using index-based coordinates (x=index, y=z=0).")
-
-    coord_dim = coords.shape[1]
-    if coord_dim == 2:
-        coords = np.column_stack([coords, np.zeros(points, dtype=coords.dtype)])
-        coord_dim = 3
-    elif coord_dim != 3:
-        raise ValueError("Coordinates must have 2 or 3 dimensions.")
 
     if args.var_names:
         names = [name.strip() for name in args.var_names.split(",") if name.strip()]
