@@ -170,6 +170,8 @@ def write_vtu(path: str, points: np.ndarray, point_data: Dict[str, np.ndarray]) 
 
 
 def select_torch_device() -> "torch.device":
+    if torch is None:
+        raise SystemExit("PyTorch is required for autoencoder decoding. Install with `pip install torch`.")
     mps_backend = getattr(torch.backends, "mps", None)
     if torch.cuda.is_available():
         return torch.device("cuda")
@@ -259,7 +261,7 @@ def main() -> None:
         elif predictions.ndim == 2:
             if args.vars is None:
                 vars_count = 1
-                print("--vars not provided; defaulting to 1 variable per point.")
+                print("2D predictions without autoencoder: --vars not provided; defaulting to 1 variable per point.")
             else:
                 vars_count = args.vars
             if predictions.shape[1] % vars_count != 0:
