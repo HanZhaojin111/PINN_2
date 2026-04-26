@@ -224,9 +224,10 @@ def main() -> None:
 
         decoder = MLP(latent_dim, output_dim, hidden_layers, hidden_width)
         decoder.load_state_dict(decoder_state)
+        mps_backend = getattr(torch.backends, "mps", None)
         if torch.cuda.is_available():
             device = torch.device("cuda")
-        elif getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+        elif mps_backend is not None and mps_backend.is_available():
             device = torch.device("mps")
         else:
             device = torch.device("cpu")
@@ -249,7 +250,11 @@ def main() -> None:
             if args.vars is not None and args.vars != vars_count:
                 raise ValueError("--vars does not match the last dimension of predictions.npy.")
         elif predictions.ndim == 2:
-            vars_count = args.vars or 1
+            if args.vars is None:
+                vars_count = 1
+                print("--vars not provided; defaulting to 1 variable per point.")
+            else:
+                vars_count = args.vars
             if predictions.shape[1] % vars_count != 0:
                 raise ValueError("predictions.npy feature dimension must be divisible by --vars.")
             points = predictions.shape[1] // vars_count
